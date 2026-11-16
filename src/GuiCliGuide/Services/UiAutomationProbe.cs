@@ -20,10 +20,10 @@ public static class UiAutomationProbe
             var processId = current.ProcessId;
             var processName = string.Empty;
             var processPath = string.Empty;
-            var parent = current.Parent;
             var parentName = string.Empty;
             var parentClassName = string.Empty;
 
+            var parent = TreeWalker.ControlViewWalker.GetParent(element);
             if (parent is not null)
             {
                 var parentCurrent = parent.Current;
