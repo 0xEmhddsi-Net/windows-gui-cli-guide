@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using GuiCliGuide.Interop;
 using GuiCliGuide.Models;
 
 namespace GuiCliGuide.Services;
