@@ -1,72 +1,38 @@
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using GuiCliGuide.Interop;
 using GuiCliGuide.Models;
-using GuiCliGuide.Services;
 
 namespace GuiCliGuide.Services;
 
-public sealed class MouseHoverTracker : IDisposable
+public static class CommandExecutor
 {
-    private readonly LowLevelMouseProc _callback;
-    private readonly object _syncRoot = new();
-    private IntPtr _hookHandle;
-    private long _lastNotificationTick;
-
-    public event Action<HoverSnapshot>? Hovered;
-
-    public MouseHoverTracker()
+    public static bool Execute(GuiActionInsight insight)
     {
-        _callback = HookCallback;
-    }
-
-    public void Start()
-    {
-        if (_hookHandle != IntPtr.Zero)
+        if (string.IsNullOrWhiteSpace(insight.Command))
         {
-            return;
+            return false;
         }
 
-        _hookHandle = User32.SetWindowsHookEx(
-            User32.WH_MOUSE_LL,
-            _callback,
-            IntPtr.Zero,
-            0);
-
-        if (_hookHandle == IntPtr.Zero)
+        try
         {
-            throw new InvalidOperationException("Unable to install the mouse hook.");
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_hookHandle != IntPtr.Zero)
-        {
-            User32.UnhookWindowsHookEx(_hookHandle);
-            _hookHandle = IntPtr.Zero;
-        }
-    }
-
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-    {
-        if (nCode >= 0 && wParam == (IntPtr)User32.WM_MOUSEMOVE)
-        {
-            var hookStruct = Marshal.PtrToStructure<User32.MSLLHOOKSTRUCT>(lParam);
-            var snapshot = UiAutomationProbe.GetSnapshotFromCursor(hookStruct.pt.x, hookStruct.pt.y);
-            if (snapshot is not null)
+            var processInfo = new ProcessStartInfo
             {
-                var now = DateTime.UtcNow.Ticks;
-                if (now - _lastNotificationTick > TimeSpan.FromMilliseconds(150).Ticks)
-                {
-                    _lastNotificationTick = now;
-                    Hovered?.Invoke(snapshot);
-                }
-            }
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{insight.Command}\"",
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal
+            };
+
+            Process.Start(processInfo);
+            return true;
         }
-
-        return User32.CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+        catch (Win32Exception)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
-
-    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 }

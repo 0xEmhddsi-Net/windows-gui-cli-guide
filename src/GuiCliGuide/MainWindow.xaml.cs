@@ -1,54 +1,116 @@
-<Window x:Class="GuiCliGuide.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GUI CLI Guide" Width="760" Height="520" WindowStartupLocation="CenterScreen" Topmost="True">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Media;
+using GuiCliGuide.Models;
+using GuiCliGuide.Services;
 
-        <TextBlock Text="GUI CLI Guide" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
+namespace GuiCliGuide;
 
-        <Border Grid.Row="1" Background="#F3F5F7" CornerRadius="8" Padding="12" Margin="0,0,0,12">
-            <StackPanel>
-                <TextBlock Text="Hovered control" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock x:Name="ControlNameText" Text="Waiting for mouse movement..." FontSize="18" TextWrapping="Wrap"/>
-                <TextBlock x:Name="ProcessInfoText" Margin="0,8,0,0" FontSize="12" Foreground="#4A4A4A"/>
-            </StackPanel>
-        </Border>
+public partial class MainWindow : Window
+{
+    private readonly MouseHoverTracker _hoverTracker;
+    private GuiActionInsight? _currentInsight;
 
-        <Border Grid.Row="2" Background="#FAFAFA" CornerRadius="8" Padding="12">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+    public MainWindow()
+    {
+        InitializeComponent();
 
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                    <TextBlock Text="Likely CLI equivalent" FontWeight="Bold" FontSize="16"/>
-                    <Border x:Name="RiskBadge" Margin="12,0,0,0" CornerRadius="8" Padding="6,2" Background="#DBF4E8">
-                        <TextBlock x:Name="RiskText" Text="Low" Foreground="#0E5B3A" FontWeight="Bold"/>
-                    </Border>
-                </StackPanel>
+        _hoverTracker = new MouseHoverTracker();
+        _hoverTracker.Hovered += OnHovered;
 
-                <TextBox x:Name="CommandTextBox" Grid.Row="1" Height="72"
-                         IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="14"
-                         Margin="0,0,0,12" Background="#111827" Foreground="#F9FAFB" Padding="10"/>
+        try
+        {
+            _hoverTracker.Start();
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show($"Unable to install the mouse hook. {ex.Message}", "GUI CLI Guide", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
 
-                <TextBlock Grid.Row="2" Text="Why this is likely the background action" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock x:Name="ExplanationText" Grid.Row="3" Text="No action detected yet." TextWrapping="Wrap" FontSize="14"/>
-            </Grid>
-        </Border>
+        Closing += (_, _) => _hoverTracker.Dispose();
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button x:Name="CopyButton" Width="120" Height="34" Margin="0,0,8,0" Click="CopyButton_Click">Copy Command</Button>
-            <Button x:Name="ExecuteButton" Width="120" Height="34" Margin="0,0,8,0" Click="ExecuteButton_Click">Run Command</Button>
-            <Button Width="160" Height="34" Click="ToggleAlwaysOnTop_Click">Toggle Always On Top</Button>
-        </StackPanel>
-    </Grid>
-</Window>
+        var defaultInsight = GuiCommandClassifier.Classify(new HoverSnapshot
+        {
+            ElementName = "Waiting for mouse movement",
+            ClassName = "System",
+            ControlType = "None",
+            ProcessName = "System",
+            ProcessId = 0,
+            ProcessPath = string.Empty,
+            WindowHandle = IntPtr.Zero
+        });
+
+        UpdateUi(defaultInsight);
+    }
+
+    private void OnHovered(HoverSnapshot snapshot)
+    {
+        var insight = GuiCommandClassifier.Classify(snapshot);
+        Dispatcher.BeginInvoke(() => UpdateUi(insight));
+    }
+
+    private void UpdateUi(GuiActionInsight insight)
+    {
+        _currentInsight = insight;
+
+        ControlNameText.Text = insight.ControlDisplayName;
+        ProcessInfoText.Text = $"Process: {insight.ProcessName} | PID: {insight.ProcessId} | Control: {insight.ControlType}";
+        CommandTextBox.Text = insight.Command;
+        ExplanationText.Text = insight.Explanation;
+        RiskText.Text = insight.Risk;
+
+        RiskBadge.Background = insight.Risk switch
+        {
+            "High" => new SolidColorBrush(Color.FromRgb(0xF3, 0x9A, 0x9A)),
+            "Medium" => new SolidColorBrush(Color.FromRgb(0xFDE68A)),
+            _ => new SolidColorBrush(Color.FromRgb(0xDB, 0xF4, 0xE8))
+        };
+
+        RiskText.Foreground = insight.Risk switch
+        {
+            "High" => new SolidColorBrush(Color.FromRgb(0x7F, 0x1D, 0x1D)),
+            "Medium" => new SolidColorBrush(Color.FromRgb(0x7C, 0x4A, 0x00)),
+            _ => new SolidColorBrush(Color.FromRgb(0x0E, 0x5B, 0x3A))
+        };
+    }
+
+    private void CopyButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentInsight is null)
+        {
+            return;
+        }
+
+        Clipboard.SetText(_currentInsight.Command);
+    }
+
+    private void ExecuteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentInsight is null)
+        {
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            $"This action may affect a process or window. Continue with:\n\n{_currentInsight.Command}\n\nThis is meant for learning and should be reviewed carefully.",
+            "Confirm command execution",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var result = CommandExecutor.Execute(_currentInsight);
+        if (!result)
+        {
+            MessageBox.Show("This command could not be run. Check the generated command and try again.", "Execution failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ToggleAlwaysOnTop_Click(object sender, RoutedEventArgs e)
+    {
+        Topmost = !Topmost;
+    }
+}
