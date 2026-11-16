@@ -1,68 +1,54 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Windows.Threading;
 using GuiCliGuide.Interop;
 using GuiCliGuide.Models;
 
 namespace GuiCliGuide.Services;
 
+/// <summary>Polls the cursor and inspects the UI Automation element beneath it.</summary>
 public sealed class MouseHoverTracker : IDisposable
 {
-    private readonly User32.LowLevelMouseProc _callback;
-    private IntPtr _hookHandle;
-    private long _lastNotificationTick;
+    private readonly DispatcherTimer _timer;
+    private string? _lastKey;
 
     public event Action<HoverSnapshot>? Hovered;
 
     public MouseHoverTracker()
     {
-        _callback = HookCallback;
+        _timer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(350)
+        };
+        _timer.Tick += OnTick;
     }
 
-    public void Start()
+    public void Start() => _timer.Start();
+
+    public void Dispose()
     {
-        if (_hookHandle != IntPtr.Zero)
+        _timer.Stop();
+        _timer.Tick -= OnTick;
+    }
+
+    private void OnTick(object? sender, EventArgs e)
+    {
+        if (!User32.GetCursorPos(out var point))
         {
             return;
         }
 
-        _hookHandle = User32.SetWindowsHookEx(
-            User32.WH_MOUSE_LL,
-            _callback,
-            IntPtr.Zero,
-            0);
-
-        if (_hookHandle == IntPtr.Zero)
+        var snapshot = UiAutomationProbe.GetSnapshotFromCursor(point.x, point.y);
+        if (snapshot is null)
         {
-            throw new InvalidOperationException("Unable to install the mouse hook.");
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_hookHandle != IntPtr.Zero)
-        {
-            User32.UnhookWindowsHookEx(_hookHandle);
-            _hookHandle = IntPtr.Zero;
-        }
-    }
-
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-    {
-        if (nCode >= 0 && wParam == (IntPtr)User32.WM_MOUSEMOVE)
-        {
-            var hookStruct = Marshal.PtrToStructure<User32.MSLLHOOKSTRUCT>(lParam);
-            var snapshot = UiAutomationProbe.GetSnapshotFromCursor(hookStruct.pt.x, hookStruct.pt.y);
-            if (snapshot is not null)
-            {
-                var now = DateTime.UtcNow.Ticks;
-                if (now - _lastNotificationTick > TimeSpan.FromMilliseconds(150).Ticks)
-                {
-                    _lastNotificationTick = now;
-                    Hovered?.Invoke(snapshot);
-                }
-            }
+            return;
         }
 
-        return User32.CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+        var key = $"{snapshot.ProcessId}|{snapshot.WindowHandle}|{snapshot.AutomationId}|{snapshot.ElementName}|{snapshot.ClassName}";
+        if (key == _lastKey)
+        {
+            return;
+        }
+
+        _lastKey = key;
+        Hovered?.Invoke(snapshot);
     }
 }

@@ -1,66 +1,81 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Automation;
-using GuiCliGuide.Interop;
 using GuiCliGuide.Models;
 
 namespace GuiCliGuide.Services;
 
-public static class UiAutomationProbe
+/// <summary>
+/// Produces educational examples, not claims that a GUI control literally runs a shell command.
+/// </summary>
+public static class GuiCommandClassifier
 {
-    public static HoverSnapshot? GetSnapshotFromCursor(int x, int y)
+    public static GuiActionInsight Classify(HoverSnapshot snapshot)
     {
-        try
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var displayName = FirstNonEmpty(snapshot.ElementName, snapshot.ClassName, snapshot.ControlType, "Unnamed UI element");
+        var processName = string.IsNullOrWhiteSpace(snapshot.ProcessName) ? "Unknown process" : snapshot.ProcessName;
+        var pid = snapshot.ProcessId;
+        var processSelector = pid > 0 ? $"Get-Process -Id {pid}" : "Get-Process";
+
+        if (HasAny(snapshot.ElementName, "close", "exit", "quit") ||
+            snapshot.AutomationId.Equals("Close", StringComparison.OrdinalIgnoreCase))
         {
-            var point = new System.Windows.Point(x, y);
-            var element = AutomationElement.FromPoint(point);
-            if (element is null)
+            return new GuiActionInsight
             {
-                return null;
-            }
-
-            var name = element.Current.Name;
-            var className = element.Current.ClassName ?? string.Empty;
-            var controlType = element.Current.LocalizedControlType ?? string.Empty;
-            var nativeWindowHandle = element.Current.NativeWindowHandle;
-
-            int processId = 0;
-            if (nativeWindowHandle != IntPtr.Zero)
-            {
-                User32.GetWindowThreadProcessId(nativeWindowHandle, out processId);
-            }
-
-            string processName = string.Empty;
-            string processPath = string.Empty;
-            if (processId > 0)
-            {
-                try
-                {
-                    using var process = Process.GetProcessById(processId);
-                    processName = process.ProcessName;
-                    processPath = process.MainModule?.FileName ?? string.Empty;
-                }
-                catch
-                {
-                    processName = string.Empty;
-                }
-            }
-
-            return new HoverSnapshot
-            {
-                ElementName = name,
-                ClassName = className,
-                ControlType = controlType,
+                ControlDisplayName = displayName,
+                ControlType = snapshot.ControlType,
                 ProcessName = processName,
-                ProcessId = processId,
-                ProcessPath = processPath,
-                WindowHandle = nativeWindowHandle
+                ProcessId = pid,
+                Risk = "High",
+                Command = "# No exact CLI equivalent: a window close usually requests an orderly app shutdown.",
+                Explanation = $"This appears to be a close/exit control for {processName}. A GUI close commonly sends a window-close request so the app can save work or show prompts. `taskkill` is not the same operation and can discard work; this app will not execute a suggested close command."
             };
         }
-        catch
+
+        if (HasAny(snapshot.ElementName, "minimize", "minimise") ||
+            snapshot.AutomationId.Equals("Minimize", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            return new GuiActionInsight
+            {
+                ControlDisplayName = displayName,
+                ControlType = snapshot.ControlType,
+                ProcessName = processName,
+                ProcessId = pid,
+                Risk = "Low",
+                Command = "# Windows API equivalent: ShowWindow(hwnd, SW_MINIMIZE)",
+                Explanation = "Minimize changes the window's display state; it normally leaves the process running. The target window handle is not necessarily the same as the process's main window, so a generic CLI command would be misleading."
+            };
         }
+
+        if (HasAny(snapshot.ElementName, "restore") ||
+            snapshot.AutomationId.Equals("Restore", StringComparison.OrdinalIgnoreCase))
+        {
+            return new GuiActionInsight
+            {
+                ControlDisplayName = displayName,
+                ControlType = snapshot.ControlType,
+                ProcessName = processName,
+                ProcessId = pid,
+                Risk = "Low",
+                Command = "# Windows API equivalent: ShowWindow(hwnd, SW_RESTORE)",
+                Explanation = "Restore changes a window's display state. It is a window-manager operation, not a process launch or termination."
+            };
+        }
+
+        return new GuiActionInsight
+        {
+            ControlDisplayName = displayName,
+            ControlType = snapshot.ControlType,
+            ProcessName = processName,
+            ProcessId = pid,
+            Risk = "Low",
+            Command = $"{processSelector} | Select-Object ProcessName, Id",
+            Explanation = $"No reliable one-to-one CLI equivalent was identified. This read-only PowerShell example only displays the process associated with the UI element; many buttons invoke application code or Windows APIs rather than a shell command."
+        };
     }
+
+    private static bool HasAny(string value, params string[] terms) =>
+        terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+    private static string FirstNonEmpty(params string[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "Unnamed UI element";
 }

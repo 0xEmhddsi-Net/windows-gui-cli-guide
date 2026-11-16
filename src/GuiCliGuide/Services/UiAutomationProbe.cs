@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Windows.Automation;
 using GuiCliGuide.Interop;
 using GuiCliGuide.Models;
@@ -17,14 +16,8 @@ public static class UiAutomationProbe
                 return null;
             }
 
-            var nativeWindowHandle = element.Current.NativeWindowHandle;
-            var processId = 0;
-
-            if (nativeWindowHandle != IntPtr.Zero)
-            {
-                User32.GetWindowThreadProcessId(nativeWindowHandle, out processId);
-            }
-
+            var current = element.Current;
+            var processId = current.ProcessId;
             var processName = string.Empty;
             var processPath = string.Empty;
 
@@ -32,29 +25,38 @@ public static class UiAutomationProbe
             {
                 try
                 {
-                    using var process = Process.GetProcessById(processId);
+                    using var process = System.Diagnostics.Process.GetProcessById(processId);
                     processName = process.ProcessName;
                     processPath = process.MainModule?.FileName ?? string.Empty;
                 }
-                catch
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
                 {
-                    processName = string.Empty;
-                    processPath = string.Empty;
+                    // The process may exit or deny access between the UI Automation query and inspection.
                 }
             }
 
             return new HoverSnapshot
             {
-                ElementName = element.Current.Name,
-                ClassName = element.Current.ClassName ?? string.Empty,
-                ControlType = element.Current.LocalizedControlType ?? string.Empty,
+                ElementName = current.Name ?? string.Empty,
+                ClassName = current.ClassName ?? string.Empty,
+                ControlType = current.ControlType?.ProgrammaticName ?? current.LocalizedControlType ?? string.Empty,
+                AutomationId = current.AutomationId ?? string.Empty,
+                FrameworkId = current.FrameworkId ?? string.Empty,
                 ProcessName = processName,
                 ProcessId = processId,
                 ProcessPath = processPath,
-                WindowHandle = nativeWindowHandle
+                WindowHandle = current.NativeWindowHandle == 0 ? IntPtr.Zero : new IntPtr(current.NativeWindowHandle)
             };
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
         {
             return null;
         }
