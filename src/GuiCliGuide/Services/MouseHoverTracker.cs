@@ -1,5 +1,4 @@
 using System.Windows.Threading;
-using GuiCliGuide.Interop;
 using GuiCliGuide.Models;
 
 namespace GuiCliGuide.Services;
@@ -9,6 +8,7 @@ public sealed class MouseHoverTracker : IDisposable
 {
     private readonly DispatcherTimer _timer;
     private string? _lastKey;
+    private bool _isPaused;
 
     public event Action<HoverSnapshot>? Hovered;
 
@@ -21,7 +21,13 @@ public sealed class MouseHoverTracker : IDisposable
         _timer.Tick += OnTick;
     }
 
+    public bool IsPaused => _isPaused;
+
     public void Start() => _timer.Start();
+
+    public void Pause() => _isPaused = true;
+
+    public void Resume() => _isPaused = false;
 
     public void Dispose()
     {
@@ -31,6 +37,11 @@ public sealed class MouseHoverTracker : IDisposable
 
     private void OnTick(object? sender, EventArgs e)
     {
+        if (_isPaused)
+        {
+            return;
+        }
+
         if (!User32.GetCursorPos(out var point))
         {
             return;
