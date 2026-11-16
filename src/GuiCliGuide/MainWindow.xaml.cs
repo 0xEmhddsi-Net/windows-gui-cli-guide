@@ -1,0 +1,54 @@
+<Window x:Class="GuiCliGuide.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GUI CLI Guide" Width="760" Height="520" WindowStartupLocation="CenterScreen" Topmost="True">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="GUI CLI Guide" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
+
+        <Border Grid.Row="1" Background="#F3F5F7" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Hovered control" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock x:Name="ControlNameText" Text="Waiting for mouse movement..." FontSize="18" TextWrapping="Wrap"/>
+                <TextBlock x:Name="ProcessInfoText" Margin="0,8,0,0" FontSize="12" Foreground="#4A4A4A"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Background="#FAFAFA" CornerRadius="8" Padding="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="Likely CLI equivalent" FontWeight="Bold" FontSize="16"/>
+                    <Border x:Name="RiskBadge" Margin="12,0,0,0" CornerRadius="8" Padding="6,2" Background="#DBF4E8">
+                        <TextBlock x:Name="RiskText" Text="Low" Foreground="#0E5B3A" FontWeight="Bold"/>
+                    </Border>
+                </StackPanel>
+
+                <TextBox x:Name="CommandTextBox" Grid.Row="1" Height="72"
+                         IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="14"
+                         Margin="0,0,0,12" Background="#111827" Foreground="#F9FAFB" Padding="10"/>
+
+                <TextBlock Grid.Row="2" Text="Why this is likely the background action" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock x:Name="ExplanationText" Grid.Row="3" Text="No action detected yet." TextWrapping="Wrap" FontSize="14"/>
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="CopyButton" Width="120" Height="34" Margin="0,0,8,0" Click="CopyButton_Click">Copy Command</Button>
+            <Button x:Name="ExecuteButton" Width="120" Height="34" Margin="0,0,8,0" Click="ExecuteButton_Click">Run Command</Button>
+            <Button Width="160" Height="34" Click="ToggleAlwaysOnTop_Click">Toggle Always On Top</Button>
+        </StackPanel>
+    </Grid>
+</Window>
