@@ -2,18 +2,21 @@
 
 A Windows 11 WPF teaching tool that inspects the accessible UI element beneath the pointer and explains a plausible CLI or Windows API equivalent.
 
-## MVP behavior
+> **AI disclosure:** This project was created with AI assistance (GitHub Copilot). The code and documentation were generated and iterated with AI under maintainer direction. AI-generated output may contain errors; review and test changes before relying on them.
 
-- Polls the pointer and queries Windows UI Automation metadata.
-- Shows the element name, control type, process and PID.
-- Explains common close/minimize/restore actions and provides a read-only process-inspection example for other controls.
-- Copies examples to the clipboard.
+## Features
 
-## Important limitations and safety
+- Inspects Windows UI Automation metadata for the control beneath the pointer.
+- Displays the element name, control type, process, and PID.
+- Explains common close, minimize, and restore controls; otherwise provides a read-only process-inspection example.
+- Includes pause/resume, confidence and risk labels, advanced details, copy-example, and copy-full-report options.
+- Supports toggling always-on-top.
 
-This app is educational, not an action recorder. UI controls do not generally invoke CLI commands directly, and there is no universal command for actions such as closing a browser tab or window. A close button usually requests an orderly application shutdown; `taskkill` is not equivalent and may lose unsaved work.
+## Safety and limitations
 
-Hovering never clicks or changes the target app. The app does not execute generated commands; examples can be copied and reviewed manually. UI Automation metadata varies across apps, and a missing or ambiguous accessible name can produce an unknown classification. Protected/elevated windows may not expose complete metadata.
+This app is educational, not an action recorder. UI controls do not generally invoke CLI commands directly, and there is no universal command for actions such as closing a browser tab or window. Suggested equivalents are illustrative, not claims about an app's internal implementation.
+
+Hovering only reads available UI Automation metadata; it does not click or change the target app. The app does not execute generated commands. Examples can be copied and reviewed manually. UI Automation metadata varies by app, and missing or incomplete information is normal.
 
 ## Requirements
 
@@ -22,13 +25,15 @@ Hovering never clicks or changes the target app. The app does not execute genera
 
 ## Build and run
 
+From the repository root in PowerShell:
+
 ```powershell
 dotnet restore src\WindowsGuiCliGuide.sln
 dotnet build src\WindowsGuiCliGuide.sln --configuration Release
 dotnet run --project src\GuiCliGuide\GuiCliGuide.csproj
 ```
 
-Run the classifier tests:
+Run the tests:
 
 ```powershell
 dotnet test src\WindowsGuiCliGuide.sln --configuration Release
